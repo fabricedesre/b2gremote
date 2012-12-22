@@ -1,0 +1,9 @@
+<overlay id="main-overlay" xmlns:html="http://www.w3.org/1999/xhtml"
+         xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+  <script type="text/javascript;version=1.8" src="overlay.js"/>
+  <menupopup id="menu_ToolsPopup">
+    <menuitem id="b2g-remote-menu" label="B2G Remote Control"
+              oncommand="openUILinkIn('about:b2g', 'tab');"/>
+</menupopup>
+</overlay>

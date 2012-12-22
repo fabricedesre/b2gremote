@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>B2G Remote Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link href="chrome://b2g-remote/skin/bootstrap/css/bootstrap.css" rel="stylesheet">
+    <link href="chrome://b2g-remote/skin/bootstrap/css/bootstrap-responsive.css" rel="stylesheet">
+    <link href="chrome://b2g-remote/skin/bootstrap/css/doc.css" rel="stylesheet">
+
+    <link href="chrome://b2g-remote/skin/main.css" rel="stylesheet">
+
+     <!-- Chrome scripts -->
+    <script type="text/javascript;version=1.8" src="main.js"> </script>
+    <script type="text/javascript;version=1.8" src="zee.js"> </script>
+    <script type="text/javascript;version=1.8" src="media-library.js"> </script>
+    <script type="text/javascript;version=1.8" src="about-crashes.js"> </script>
+    <script type="text/javascript;version=1.8" src="about-config.js"> </script>
+    <script type="text/javascript;version=1.8" src="about-memory.js"> </script>
+    <script type="text/javascript;version=1.8" src="sdcard.js"> </script>
+    <script type="text/javascript;version=1.8" src="debug-console.js"> </script>
+    <script type="text/javascript;version=1.8" src="contacts-messages.js"> </script>
+    <script type="text/javascript;version=1.8" src="updates.js"> </script>
+    <script type="text/javascript;version=1.8" src="user-agent.js"> </script>
+    <script type="text/javascript;version=1.8" src="apps-manager.js"> </script>
+  </head>
+
+  <body>
+
+    <h2><img src="chrome://b2g-remote/skin/logo_0064_65.png" width="64px"/>B2G Remote Control</h2>
+    <hr/>
+
+    <div class="container-fluid">
+      <div class="row-fluid">
+        <div class="span3 bs-docs-sidebar">
+          <ul class="nav nav-list bs-docs-sidenav affix-top">
+            <li class="active"><a href="#device-info"><i class="icon-chevron-right"></i>Device Information</a></li>
+            <li class="needs-dbg"><a href="#ua-switcher"><i class="icon-chevron-right"></i>User Agent Switcher</a></li>
+            <!--
+            <li class="needs-dbg-adb"><a href="#updates"><i class="icon-chevron-right"></i>Updates</a></li>
+            <li class="needs-dbg-adb"><a href="#sdcard"><i class="icon-chevron-right"></i>View SD Card Content</a></li>
+          -->
+            <li class="needs-dbg"><a href="#contacts"><i class="icon-chevron-right"></i>View Contacts</a></li>
+            <li class="needs-dbg"><a href="#about-config"><i class="icon-chevron-right"></i>about:config</a></li>
+            <li class="needs-dbg"><a href="#about-crashes"><i class="icon-chevron-right"></i>about:crashes</a></li>
+            <!--
+            <li class="needs-dbg-adb"><a href="#about-memory"><i class="icon-chevron-right"></i>about:memory</a></li>
+            <li class="needs-dbg-adb"><a href="#media-library"><i class="icon-chevron-right"></i>Media Library</a></li>
+          -->
+            <li class="needs-dbg-adb"><a href="#apps-manager"><i class="icon-chevron-right"></i>Applications Manager</a></li>
+            <li class="needs-dbg"><a href="#debug-console"><i class="icon-chevron-right"></i>Debug Console</a></li>
+          </ul>
+        </div>
+        <div class="span9">
+          <!-- The Device Info Panel -->
+          <div id="device-info" class="panel">
+            <h4 id="adb-device" class="error">ADB Not Ready</h4>
+            <iframe id="adb-help" class="help-frame" src="chrome://b2g-remote/locale/adb-help.html"> </iframe>
+            <h4 id="remote-connection" class="error">Remote Debugger Connection Not Ready</h4>
+            <iframe id="dbg-help" class="help-frame" src="chrome://b2g-remote/locale/dbg-help.html"> </iframe>
+            <table class="table table-striped table-bordered" hidden>
+              <tbody id="device-info-details"></tbody>
+            </table>
+          </div>
+
+          <!-- The UA Switcher Panel -->
+          <div id="ua-switcher" class="panel" hidden>
+            <h4>Change The Device User Agent To:</h4>
+            <select name="user-agent" id="user-agent-select"></select>
+            <h4>Or Enter a Custom User Agent:</h4>
+            <div class="input-append">
+              <input class="span8" id="custom-ua" type="text">
+              <button class="btn" type="button" id="custom-ua-button">Change</button>
+            </div>
+          </div>
+
+          <!-- Updates Management -->
+          <div id="updates" class="panel" hidden>
+            <h4>Updates</h4>
+            <button class="btn" type="button" id="check-updates">Check For Updates</button>
+            <p><progress id="updates-progress" hidden> </progress></p>
+            <div id="updates-available" hidden>
+              <p id="update-msg"> </p>
+              <button class="btn" id="download-update">Download Update</button>
+            </div>
+          </div>
+
+          <!-- The SD Card Panel -->
+          <div id="sdcard" class="panel" hidden>
+            <h4>SD Card Browser</h4>
+            <ul class="breadcrumb" id="sdcard-breadcrumb">
+            </ul>
+            <table class="table table-striped table-bordered table-condensed">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Size</th>
+                  <th>Modified</th>
+                </tr>
+              </thead>
+              <tbody  id="file-list"></tbody>
+            </table>
+          </div>
+
+          <!-- The Contacts Panel -->
+          <div id="contacts" class="panel" hidden>
+            <h4>Your Contacts</h4>
+            <p>
+              <button id="browse-contacts" class="btn">Get Contacts</button>
+            </p>
+            <table class="table table-striped table-bordered table-condensed" hidden>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Tel</th>
+                </tr>
+              </thead>
+              <tbody  id="contacts-list"></tbody>
+            </table>
+          </div>
+
+          <!-- The about:config Panel -->
+          <div id="about-config" class="panel" hidden>
+            <h4>about:config</h4>
+            <div class="input-append">
+              Filter:
+              <form id="aboutconfig-form">
+                <input class="span8" id="aboutconfig-filter"
+                       type="search" placeholder="Enter preference name">
+                <button class="btn" id="aboutconfig-search" type="submit" >Search</button>
+                <button class="btn" data-toggle="modal" data-target="#newPrefModal">New…</button>
+              </form>
+            </div>
+            <div id="newPrefModal" class="modal hide fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+              <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                <h3>New Preference</h3>
+              </div>
+              <div class="modal-body">
+                <form class="form-horizontal">
+                  <div class="control-group">
+                    <label class="control-label" for="newpref-name">Pref Name</label>
+                    <div class="controls">
+                      <input type="text" id="newpref-name">
+                    </div>
+                  </div>
+                  <div class="control-group">
+                    <label class="control-label" for="newpref-value">Initial Value</label>
+                    <div class="controls">
+                      <input type="text" id="newpref-value">
+                    </div>
+                  </div>
+                  <div class="control-group">
+                    <label class="control-label" for="newpref-type">Type</label>
+                    <div class="controls">
+                      <select id="newpref-type">
+                        <option value="string">String</option>
+                        <option value="integer">Integer</option>
+                        <option value="boolean">Boolean</option>
+                      </select>
+                    </div>
+                  </div>
+                </form>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-primary" id="newpref-create">Create</button>
+              </div>
+            </div>
+            <table class="table table-striped table-bordered table-condensed" hidden>
+              <thead>
+                <th>Name</th>
+                <th>Value</th>
+              </thead>
+              <tbody id="aboutconfig-list"></tbody>
+            </table>
+          </div>
+
+          <!-- The about:crashes Panel -->
+          <div id="about-crashes" class="panel" hidden>
+            <h4>about:crashes</h4>
+            <ul>
+              <li>
+                <h5>Submitted Crash Reports</h5>
+                <table class="table table-striped table-bordered table-condensed">
+                  <thead>
+                    <th>Report ID</th>
+                    <th>Date Submitted</th>
+                  </thead>
+                  <tbody id="aboutcrashes-submitted"></tbody>
+                </table>
+              </li>
+              <li>
+                <h5>Pending Crash Reports</h5>
+                <table class="table table-striped table-bordered table-condensed">
+                  <thead>
+                    <th>Report ID</th>
+                    <th>Crash Date</th>
+                  </thead>
+                  <tbody id="aboutcrashes-pending"></tbody>
+                </table>
+              </li>
+            </ul>
+          </div>
+
+          <!-- The about:memory Panel -->
+          <div id="about-memory" class="panel" hidden>
+            <h4>about:memory</h4>
+            <p>
+              <button class="btn" id="ask-aboutmemory">Generate Report</button>
+            </p>
+            <progress id="aboutmemory-progress" hidden> </progress>
+            <table class="table table-striped table-bordered table-condensed" hidden>
+              <tbody id="memreport-list"></tbody>
+            </table>
+            <p hidden>
+              <button class="btn" id="view-aboutmemory">View Report</button>
+            </p>
+          </div>
+
+          <!-- The Debug Console Panel -->
+          <div id="debug-console" class="panel" hidden>
+            <h4>Debug Console</h4>
+            <span id="debug-filename" hidden> </span>
+            <textarea id="debug-input" autosave> </textarea>
+            <p>
+              <button class="btn" id="debug-submit">Execute Script</button>
+              <button class="btn" id="debug-save">Save To…</button>
+              <button class="btn" id="debug-load">Load From…</button>
+            </p>
+            <textarea id="debug-output" readonly> </textarea>
+          </div>
+
+          <!-- The Media Library Panel -->
+          <div id="media-library" class="panel" hidden>
+            <h4>Media Library</h4>
+            <button class="btn" id="medialibrary-sync">Synchronize</button>
+          </div>
+
+          <!-- The Application Management Panel -->
+          <div id="apps-manager" class="panel" hidden>
+            <h4>Applications</h4>
+
+            <h5>Manage Certificates</h5>
+            <button class="btn" data-toggle="modal" data-target="#certModal">Add…</button>
+            <div id="certModal" class="modal hide fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+              <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                <h3>Upload New Certificate</h3>
+              </div>
+              <div class="modal-body">
+                <form class="form-horizontal">
+                  <div class="control-group">
+                    <label class="control-label" for="newcert-path">File Location</label>
+                    <div class="controls">
+                      <input type="file" id="newcert-path">
+                    </div>
+                  </div>
+                  <div class="control-group">
+                    <label class="control-label" for="newcert-name">Certificate Name</label>
+                    <div class="controls">
+                      <input type="text" id="newcert-name" placeholder="dev-cert">
+                    </div>
+                  </div>
+                </form>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-primary" id="newcert-upload">Upload</button>
+              </div>
+            </div>
+            <table class="table table-striped table-bordered table-condensed">
+              <tbody id="certs-list"></tbody>
+            </table>
+            <hr/>
+
+            <h5>Manage Applications</h5>
+            <button class="btn" onclick="appsManager.updateApps()">Update List</button>
+            <button class="btn" data-toggle="modal" data-target="#appInstallModal">Install Application…</button>
+
+            <div id="appInstallModal" class="modal hide fade" tabindex="-1" role="dialog" aria-hidden="true">
+              <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                <h3>Upload Application Package</h3>
+              </div>
+              <div class="modal-body">
+                <form class="form-horizontal">
+                  <div class="control-group">
+                    <label class="control-label" for="newcert-path">File Location</label>
+                    <div class="controls">
+                      <input type="file" id="package-path">
+                    </div>
+                  </div>
+                </form>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-primary" id="package-upload">Upload</button>
+              </div>
+            </div>
+
+            <table class="table table-striped table-bordered table-condensed">
+              <tbody id="applications-list"></tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <hr/>
+
+    <!-- We need these for dropdowns, modals, etc. -->
+    <script src="chrome://b2g-remote/skin/bootstrap/js/jquery.js"></script>
+    <script src="chrome://b2g-remote/skin/bootstrap/js/bootstrap.js"></script>
+
+  </body>
+</html>

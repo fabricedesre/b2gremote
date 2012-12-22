@@ -1,0 +1,9 @@
+add messages to contacts with import/export
+updates push
+crashes submission
+synchro media files
+l10n
+adb pull
+orion or ace source editor
+use http://vitalets.github.com/bootstrap-editable/ for about:config
+settings management

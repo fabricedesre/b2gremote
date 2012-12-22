@@ -1,0 +1,92 @@
+body {
+  background-color: lightgray;
+}
+
+.help {
+  background-color: white;
+  padding: 1em;
+}
+
+#debug-console textarea {
+  font-family: monospace;
+  height: 300px;
+  width: 100%;
+}
+
+.error {
+  color: red;
+}
+
+.bs-docs-sidenav {
+  margin-top: 0px;
+  width: 100%;
+}
+
+/* Base class */
+.panel {
+  position: relative;
+  padding: 20px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.contact-panel {
+  background-color: lightyellow;
+  margin: 10px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.file-icon {
+  margin-right: 4px;
+  margin-top: -4px;
+}
+
+.file-size {
+  text-align: right;
+  float: right;
+}
+
+.needs-adb {
+  visibility: collapse;
+  height: 0;
+}
+
+.needs-dbg {
+  visibility: collapse;
+  height: 0;
+}
+
+.needs-dbg-adb {
+  visibility: collapse;
+  height: 0;
+}
+
+.needs-adb.has-adb {
+  visibility: visible;
+  height: auto;
+}
+
+.needs-dbg.has-dbg {
+  visibility: visible;
+  height: auto;
+}
+
+.needs-dbg-adb.has-adb.has-dbg {
+  visibility: visible;
+  height: auto;
+}
+
+.help-frame {
+  width: 100%;
+  height: 300px;
+  border: 3px solid lightgray;
+  border-radius: 4px;
+}
+
+.hidden {
+  visibility: hidden;
+  height: 0;
+}

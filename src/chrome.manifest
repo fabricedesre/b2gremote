@@ -1,0 +1,11 @@
+content b2g-remote content/
+skin    b2g-remote default themes/
+locale  b2g-remote en-US locale/en-US/
+
+component {783a881d-eae8-4cfb-8ac4-6b9f3b353a11} components/B2GProtocol.js
+contract @mozilla.org/network/protocol;1?name=b2g {783a881d-eae8-4cfb-8ac4-6b9f3b353a11}
+
+component {30cae012-9c62-491f-a93b-ecfe554cff59} components/about.js
+contract @mozilla.org/network/protocol/about;1?what=b2g {30cae012-9c62-491f-a93b-ecfe554cff59}
+
+overlay chrome://browser/content/browser.xul chrome://b2g-remote/content/overlay.xul
