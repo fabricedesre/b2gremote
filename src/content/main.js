@@ -12,114 +12,325 @@ Cu.import("resource://gre/modules/commonjs/promise/core.js");
 Cu.import("chrome://b2g-remote/content/adb.jsm");
 Cu.import("chrome://b2g-remote/content/debugger.jsm");
 Cu.import("resource://gre/modules/osfile.jsm");
-
-//Cu.import("resource:///modules/source-editor.jsm");
+Cu.import("resource://gre/modules/NetUtil.jsm");
+Cu.import("resource://gre/modules/FileUtils.jsm");
 
 // The default remote debugging port.
 let debuggerPort = 6000;
 
+// l10n string bundle
+let strings = Services.strings
+              .createBundle("chrome://b2g-remote/locale/b2gremote.properties");
+
+// Can be "hosted" or "packaged"
+let appKind;
+
+// The application type, as defined in nsIPrincipal
+let appType;
+
+// The path to the app's directory.
+let appPath;
+
+// The app id used to push to the device.
+let appId;
+
+// true if we have a device connected through ADB.
+let adbReady = false;
+
+// true if we the remote debugger is connected.
+let dbgReady = false;
+
 function log(aText) {
   window.console.log(aText);
+  dump(aText + "\n");
 }
 
 function replaceTextNode(aId, aText) {
   document.getElementById(aId).firstChild.textContent = aText;
 }
 
-function humanSize(aSize) {
-  let oneK = 1024;
-  let oneM = oneK * oneK;
-  let oneG = oneM * oneK;
-
-  function pad(aValue) {
-    let s = "" + aValue;
-    if (s.indexOf(".") == -1) {
-      s += ".0";
-    }
-    return s;
+function guessAppKind() {
+  let dir = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+  dir.initWithPath(appPath);
+  appKind = null;
+  if (!dir.exists()) {
+    return;
   }
 
-  if (aSize > oneG) {
-    return pad(Math.round((aSize / oneG) * 10) / 10) + "G";
-  } else if (aSize > oneM) {
-    return pad(Math.round((aSize / oneM) * 10) / 10) + "M";
-  } else if (aSize > oneK) {
-    return pad(Math.round((aSize / oneK) * 10) / 10) + "K";
-  } else {
-    return aSize + "B";
+  appId = dir.leafName;
+
+  let file = dir.clone();
+  file.append("application.zip");
+  if (file.exists()) {
+    appKind = "packaged";
+    return;
+  }
+
+  let missing = ["manifest.webapp", "metadata.json"]
+                .some(function(aName) {
+                  file = dir.clone();
+                  dir.append(aName);
+                  return !file.exists();
+                });
+  if (!missing) {
+    appKind = "hosted";
   }
 }
 
-let initFuncts = {};
+function appStatusFromType(aType) {
+  switch(aType) {
+    case "privileged":
+      return Ci.nsIPrincipal.APP_STATUS_INSTALLED;
+      break;
+    case "certified":
+      return Ci.nsIPrincipal.APP_STATUS_CERTIFIED;
+      break;
+    default:
+      return Ci.nsIPrincipal.APP_STATUS_INSTALLED;
+  }
+}
 
-// Panel navigation
-let oldHash = window.location.hash || '#device-info';
-function showPanel() {
-  let hash = window.location.hash || '#device-info';
+// Get the application type by either reading manifest.webapp or extracting
+// it from application.zip
+function getAppType(aCallback) {
+  if (!appKind) {
+    return;
+  }
 
-  let oldPanel = document.querySelector(oldHash);
-  let newPanel = document.querySelector(hash);
+  let dir = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+  dir.initWithPath(appPath);
 
-  oldPanel.setAttribute("hidden", "true");
-  newPanel.removeAttribute("hidden");
+  // Default value if anything goes wrong.
+  appType = Ci.nsIPrincipal.APP_STATUS_INSTALLED;
 
-  [oldHash, hash].forEach(function(aHash) {
-    let selector = "li a[href='" + aHash + "']";
-    let node = document.querySelector(selector);
-    if (node) {
-      node.parentNode.classList.toggle("active");
+  if (appKind == "hosted") {
+    let file = dir.clone();
+    file.append("manifest.webapp");
+
+    let decoder = new TextDecoder();
+    let promise = OS.File.read(file.path);
+    promise = promise.then(
+      function onSuccess(aArray) {
+        try {
+          let manifest = JSON.parse(decoder.decode(aArray));
+          if ("type" in manifest) {
+            appType = appStatusFromType(manifest.type);
+          }
+        } catch(e) { }
+        aCallback();
+      },
+      function onError() {
+        aCallback();
+      }
+    );
+  } else {
+    let file = dir.clone();
+    file.append("application.zip");
+    let zipReader  = Cc["@mozilla.org/libjar/zip-reader;1"]
+                       .createInstance(Ci.nsIZipReader);
+    zipReader.open(file);
+    let istream = zipReader.getInputStream("manifest.webapp");
+
+    // Obtain a converter to read from a UTF-8 encoded input stream.
+    let converter = Cc["@mozilla.org/intl/scriptableunicodeconverter"]
+                      .createInstance(Ci.nsIScriptableUnicodeConverter);
+    converter.charset = "UTF-8";
+
+    let manifest = JSON.parse(converter.ConvertToUnicode(NetUtil.readInputStreamToString(istream,
+                                                         istream.available()) || ""));
+
+    zipReader.close();
+    appType = appStatusFromType(manifest.type);
+    aCallback();
+  }
+}
+
+function chooseAppDir() {
+  let picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+  picker.init(window, strings.GetStringFromName("choose-app-dir"),
+              picker.modeGetFolder);
+  picker.appendFilters(picker.filterAll);
+  picker.open(
+    {
+      done: function(aResult) {
+        const typeStrings = ["NoApp", "Web", "Privileged", "Certified"];
+
+        if (aResult != picker.returnOK) {
+          return;
+        }
+        appPath = picker.fileURL.QueryInterface(Ci.nsIFileURL).path;
+        guessAppKind();
+        if (appKind) {
+          getAppType(function() {
+            replaceTextNode("app-info",
+                             appKind ? appPath + " : " + appKind +
+                                       " (" + typeStrings[appType] + ")"
+                                     : " ");
+            updateUIState();
+          });
+        }
+        updateUIState();
+      }
     }
+  );
+}
+
+function updateUIState() {
+  log("updating UI - dbgReady=" + dbgReady + " adbReady=" + adbReady);
+  let deviceButton = document.getElementById("push-device");
+  let simulatorButton = document.getElementById("push-simulator");
+  let pushBox = document.getElementById("push-box");
+
+  if (dbgReady) {
+    simulatorButton.removeAttribute("disabled");
+    if (adbReady) {
+      deviceButton.removeAttribute("disabled");
+    } else {
+      deviceButton.setAttribute("disabled", "true");
+    }
+  } else {
+    deviceButton.setAttribute("disabled", "true");
+    simulatorButton.setAttribute("disabled", "true");
+  }
+
+  if (appPath && appKind) {
+    pushBox.removeAttribute("hidden");
+  } else {
+    pushBox.setAttribute("hidden", "true");
+  }
+}
+
+let pushProgress = {
+  get _node() { return document.getElementById("push-progress") },
+
+  show: function progressShow() {
+    this._node.removeAttribute("hidden");
+  },
+
+  hide: function progressHide() {
+    this._node.setAttribute("hidden", "true");
+  },
+
+  setMessage: function progressMessage(aMsg) {
+    replaceTextNode("progress-message", aMsg);
+  }
+}
+
+function onWebappsEvent(aState, aType, aPacket) {
+  pushProgress.hide();
+  if (aType.error) {
+    window.alert(strings.GetStringFromName("install.error") +
+                 " " + aType.message);
+  } else {
+    window.alert(strings.GetStringFromName("install.success"));
+  }
+}
+
+function pushToDevice() {
+  if (!appKind || !appPath || !appId) {
+    return;
+  }
+
+  pushProgress.show();
+
+  let filesToPush = appKind == "hosted" ? ["manifest.webapp", "metadata.json"]
+                                        : ["application.zip"];
+
+  let destDir = "/data/local/tmp/b2g/" + appId + "/";
+  let dir = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+  dir.initWithPath(appPath);
+
+  let filePushed  =0;
+  let error = false;
+
+  function pushedFile() {
+    filePushed++;
+    log(filePushed + " files pushed.");
+    if (filePushed == filesToPush.length && !error) {
+      log("All files pushed.");
+      // We can now call the remote debugger install method.
+      pushProgress.setMessage("Installing application");
+      Debugger.webappsRequest({ type: "install",
+                                appId: appId,
+                                appType: Ci.nsIPrincipal.APP_STATUS_INSTALLED
+                              })
+      .then(
+        function installSuccess() {
+          // Nothing to do here, we'll wait for the async event.
+        },
+        function installError(aError) {
+          window.alert(strings.GetStringFromName("install.error") +
+                       " " + aType.message);
+          pushProgress.hide();
+        }
+      );
+    } else {
+      pushProgress.hide();
+    }
+  }
+
+  filesToPush.forEach(function(aName) {
+    let file = dir.clone();
+    file.append(aName);
+    pushProgress.setMessage("Pushing file: " + aName);
+
+    ADB.push(file.path, destDir + aName).then(
+      pushedFile,
+      function pushError() {
+        error = true;
+        pushedFile();
+      }
+    );
+  });
+}
+
+function pushToSimulator() {
+  if (!appKind || !appPath || !appId) {
+    return;
+  }
+
+  // Move needed files to $TMP/b2g/$appId
+  let filesToPush = appKind == "hosted" ? ["manifest.webapp", "metadata.json"]
+                                        : ["application.zip"];
+
+  let destDir = FileUtils.getDir("TmpD", ["b2g", appId], true, false);
+  let origDir = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+  origDir.initWithPath(appPath);
+  filesToPush.forEach(function(aName) {
+    let file = origDir.clone();
+    file.append(aName);
+    file.moveTo(destDir, aName);
   });
 
-  oldHash = hash;
-
-  let initFunct = initFuncts[hash.substring(1)];
-  if (initFunct && typeof initFunct == "function") {
-    initFunct();
-  }
+  // We can now call the remote debugger install method.
+  pushProgress.show();
+  pushProgress.setMessage("Installing application");
+  Debugger.webappsRequest({ type: "install",
+                            appId: appId,
+                            appType: Ci.nsIPrincipal.APP_STATUS_INSTALLED
+                          })
+  .then(
+    function installSuccess() {
+      // Nothing to do here, we'll wait for the async event.
+    },
+    function installError(aError) {
+      window.alert(strings.GetStringFromName("install.error") +
+                   " " + aType.message);
+      pushProgress.hide();
+    }
+  );
 }
 
-function init() {
+function initADB() {
   ADB.listDevices().then(
     function onSuccess(data) {
       if (data.length) {
         replaceTextNode("adb-device", data[0]);
-        document.getElementById("adb-device").classList.remove("error");
-        let nodes = document.querySelectorAll(".needs-adb, .needs-dbg-adb");
-        for (let i = 0; i < nodes.length; i++) {
-          nodes.item(i).classList.add("has-adb");
-        }
-        document.getElementById("adb-help").classList.add("hidden");
       }
       ADB.forwardPort(debuggerPort).then(
         function onSuccess(data) {
-          Debugger.init(debuggerPort).then(
-            function onSuccess() {
-              replaceTextNode("remote-connection",
-                              "Remote Debugger Connected on Port " + debuggerPort);
-              document.getElementById("remote-connection")
-                      .classList.remove("error");
-              let nodes = document.querySelectorAll(".needs-dbg, .needs-dbg-adb");
-              for (let i = 0; i < nodes.length; i++) {
-                nodes.item(i).classList.add("has-dbg");
-              }
-              document.getElementById("dbg-help").classList.add("hidden");
-              Debugger.runScript("deviceInfo.js").then(
-                function onSuccess(aResult) {
-                  let res = Debugger.unpackResult(aResult, true);
-                  let table = document.getElementById("device-info-details");
-                  table.parentNode.removeAttribute("hidden");
-                  function addRow(aName, aValue) {
-                    table.innerHTML += "<tr><td>" + aName + "</td><td>" +
-                                       aValue + "</td></tr>";
-                  }
-                  addRow("Gecko version", res.platform_version);
-                  addRow("Build ID", res.platform_build_id);
-                  addRow("Update Channel", res.update_channel);
-                }
-              );
-            }
-          );
+          adbReady = true;
+          updateUIState();
         }
       );
     },
@@ -129,31 +340,48 @@ function init() {
   );
 }
 
-// Global initialization
-window.addEventListener("load", function loadWindow() {
-  window.removeEventListener("load", loadWindow);
-  window.addEventListener("hashchange", showPanel);
+function initDBG() {
+  Debugger.init(debuggerPort).then(
+    function onSuccess() {
+      dbgReady = true;
+      Debugger.setWebappsListener(onWebappsEvent);
+      updateUIState();
+    }
+  );
+}
 
-  userAgent.init();
-  sdcard.init();
-  contacts.init();
-  messages.init();
-  aboutConfig.init();
-  aboutMemory.init();
-  aboutCrashes.init();
-  updates.init();
-  MediaLibrary.init();
-  debugConsole.init();
-  appsManager.init();
+function init() {
+  log("init b2gremote");
+  updateUIState();
 
-  init();
-});
+  initADB();
+  initDBG();
+
+  document.getElementById("choose-dir-button")
+          .addEventListener("click", chooseAppDir);
+  document.getElementById("push-device")
+          .addEventListener("click", pushToDevice);
+  document.getElementById("push-simulator")
+          .addEventListener("click", pushToSimulator);
+}
 
 let ADBObserver = {
   observe: function(aSubject, aTopic, aData) {
-    window.location.reload();
+    if (aTopic == "adb-device-connected") {
+      initADB();
+    } else {
+      adbReady = false;
+      updateUIState();
+    }
   }
 }
+
+// Global initialization
+window.addEventListener("load", function loadWindow() {
+  window.removeEventListener("load", loadWindow);
+
+  init();
+});
 
 Services.obs.addObserver(ADBObserver, "adb-device-connected", false);
 Services.obs.addObserver(ADBObserver, "adb-device-disconnected", false);

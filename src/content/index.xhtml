@@ -1,0 +1,47 @@
+<!DOCTYPE html [
+  <!ENTITY % htmlDTD
+    PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "DTD/xhtml1-strict.dtd">
+  %htmlDTD;
+  <!ENTITY % indexDTD
+    SYSTEM "chrome://b2g-remote/locale/index.dtd">
+  %indexDTD;
+]>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8"> </meta>
+    <title>&title;</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> </meta>
+
+    <link href="chrome://b2g-remote/skin/main.css" rel="stylesheet"> </link>
+
+     <!-- Chrome scripts -->
+    <script type="application/javascript;version=1.8" src="chrome://b2g-remote/content/main.js"/>
+  </head>
+
+  <body>
+
+    <h1>
+      <img src="chrome://b2g-remote/skin/logo_0064_65.png" width="64px"/>
+      &title;
+    </h1>
+
+    <div id="container">
+      &choose-app.message;
+      <button id="choose-dir-button">&choose-dir.message;</button>
+      <div id="app-info"> </div>
+      <div id="push-box" hidden="true">
+        &push-app-dest.message;
+        <button id="push-device">&push-device.message;
+          <span id="adb-device"> </span>
+        </button>
+        <button id="push-simulator">&push-simulator.message;</button>
+        <div id="push-progress" hidden="true">
+          <progress id="push-progress-progress"/>
+          <div id="progress-message"> </div>
+        </div>
+      </div>
+    </div>
+
+  </body>
+</html>

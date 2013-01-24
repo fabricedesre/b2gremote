@@ -10,6 +10,9 @@ Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("chrome://b2g-remote/content/adb.jsm");
 
 (function() {
+  let strings = Services.strings
+               .createBundle("chrome://b2g-remote/locale/b2gremote.properties");
+
   let adbTracker = {
     observe: function(aSubject, aTopic, aData) {
       dump("Got device event: " + aTopic + " " + aData + "\n");
@@ -17,11 +20,11 @@ Cu.import("chrome://b2g-remote/content/adb.jsm");
       let connected = aTopic == "adb-device-connected";
       let alertsService = Cc["@mozilla.org/alerts-service;1"]
                             .getService(Ci.nsIAlertsService);
+      let stringName = connected ? "adb.connected" : "adb.disconnected";
       alertsService.showAlertNotification(
         "chrome://b2g-remote/skin/logo_0064_65.png",
         "B2G Remote Control",
-        aData + (connected ? " is now connected."
-                           : " is now disconnected.")
+        aData + " " + strings.GetStringFromName(stringName)
       );
     }
   }

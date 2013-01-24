@@ -1,0 +1,6 @@
+<!ENTITY title "B2G Remote Control">
+<!ENTITY choose-app.message "Select the directory of the app you want to push">
+<!ENTITY choose-dir.message "Choose...">
+<!ENTITY push-app-dest.message "Where do you want to push your app?">
+<!ENTITY push-device.message "To my device">
+<!ENTITY push-simulator.message "To my simulator">

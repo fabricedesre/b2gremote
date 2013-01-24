@@ -121,6 +121,7 @@ this.ADB = {
   // We can't reuse runCommand here because we keep the socket alive.
   // @return The socket used.
   trackDevices: function adb_trackDevices() {
+    debug("trackDevices");
     let socket = this._connect();
     let waitForFirst = true;
     let devices = {};
@@ -198,6 +199,7 @@ this.ADB = {
 
   // Sends back an array of device names.
   listDevices: function adb_listDevices() {
+    debug("listDevices");
     let deferred = Promise.defer();
 
     let promise = this.runCommand("host:devices");
@@ -220,6 +222,7 @@ this.ADB = {
 
   // sends adb forward tcp:aPort tcp:6000
   forwardPort: function adb_forwardPort(aPort) {
+    debug("forwardPort " + aPort);
     // <host-prefix>:forward:<local>;<remote>
 
     let promise = this.runCommand("host:forward:tcp:" + aPort + ";tcp:6000");

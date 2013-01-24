@@ -14,117 +14,52 @@ this.EXPORTED_SYMBOLS = ["Debugger"];
 
 this.Debugger = {
   _client: null,
+  _webappsActor: null,
 
   init: function dbg_init(aPort) {
+    dump("Debugger init(" + aPort + ")\n");
     let enabled = Services.prefs.getBoolPref("devtools.debugger.remote-enabled");
     if (!enabled) {
       Services.prefs.setBoolPref("devtools.debugger.remote-enabled", true);
     }
 
     let transport = debuggerSocketConnect("localhost", aPort);
-    let client = new DebuggerClient(transport);
+    this._client = new DebuggerClient(transport);
 
     let deferred = Promise.defer();
     let self = this;
 
-    client.connect(function onConnected(aType, aTraits) {
-      client.listTabs(function(aResponse) {
-        client.attachConsole(aResponse.consoleActor, [],
-                              function onResponse(aResponse, aConsole) {
-          if (!aResponse.error) {
-            self._client = aConsole;
-            deferred.resolve();
-          } else {
-            deferred.reject();
-          }
-        });
+    this._client.connect(function onConnected(aType, aTraits) {
+      self._client.listTabs(function(aResponse) {
+        if (aResponse.webappsActor) {
+          self._webappsActor = aResponse.webappsActor;
+          deferred.resolve();
+        } else {
+          deferred.reject();
+        }
       });
     });
     return deferred.promise;
   },
 
-  _buildCode: function dbg_buildCode(aCode) {
-    let res = aCode.replace(/Cc\[/g, "Components.classes[")
-                   .replace(/Ci./g, "Components.interfaces.");
-    return res;
-  },
-
-  runCode: function dbg_runCode(aText) {
+  webappsRequest: function dbg_webappsRequest(aData) {
+    dump("webappsRequest " + this._webappsActor + "\n");
+    aData.to = this._webappsActor;
+    dump("about to send " + JSON.stringify(aData, null, 2) + "\n");
     let deferred = Promise.defer();
-    if (!this._client) {
-      let window = Services.wm.getMostRecentWindow("navigator:browser");
-      window.setTimeout(function() { deferred.reject("DBG_NOT_READY"); });
-      return deferred.promise;
-    }
-
-    this._client.evaluateJS(this._buildCode(aText), function(aResponse) {
-      deferred.resolve(aResponse);
-    });
-
-    return deferred.promise;
-  },
-
-  setPref: function dbg_changePref(aName, aValue, aType) {
-    //dump("setPref " + aName + " " + aValue + " " + typeof(aValue) + "\n");
-    return this.runScript("setPref.js", aName, aValue, aType || "string");
-  },
-
-  // Extract the result from a return message.
-  unpackResult: function dbg_unpackResult(aResult, aForceJSON) {
-    if (aResult.error) {
-      let window = Services.wm.getMostRecentWindow("navigator:browser");
-      window.console.error("Error unpacking: " + aResult.error);
-      return;
-    }
-
-    let result = aResult.result;
-    if (!aForceJSON && result.type !== "object") {
-      return result;
-    }
-
-    return JSON.parse(result);
-  },
-
-  // Runs a script available under chrome://b2g-remote/content/scripts/
-  // Additionnal parameters can be sent and will be substituated for $n
-  runScript: function dbg_runScript(aName) {
-    //dump("runScript " + aName + "\n");
-    let args = arguments;
-
-    let uri = "chrome://b2g-remote/content/scripts/" + aName;
-    let deferred = Promise.defer();
-
-    let xhr = Cc["@mozilla.org/xmlextras/xmlhttprequest;1"]
-                .createInstance(Ci.nsIXMLHttpRequest);
-    xhr.open("GET", uri, true);
-    xhr.responseType = "text";
-
-    xhr.addEventListener("load", (function() {
-      let text = xhr.responseText;
-
-      for (let i = 1; i < args.length && i < 10; i++) {
-        let regexp = new RegExp("\\$" + i, "g");
-        text = text.replace(regexp, args[i]);
+    this._client.request(aData,
+      function onResponse(aResponse) {
+      dump("response=" + JSON.stringify(aResponse, null, 2) + "\n");
+      if (aResponse.error) {
+        deferred.reject(aResponse.message);
+      } else {
+        deferred.resolve();
       }
-      //dump(text + "\n");
-      let cPromise = this.runCode(text);
-      cPromise.then(
-        function onSuccess(aResult) {
-          //dump("SUCCESS: " + JSON.stringify(aResult, null, 2));
-          deferred.resolve(aResult);
-        },
-        function onError(aError) {
-          //dump("ERROR: " + JSON.stringify(aResult, null, 2));
-          deffered.reject(aError);
-        }
-      );
-    }).bind(this));
-
-    xhr.addEventListener("error", function() {
-      deferred.reject("NO_SUCH_SCRIPT");
     });
-
-    xhr.send(null);
     return deferred.promise;
+  },
+
+  setWebappsListener: function dbg_setWebappsListener(aListener) {
+    this._client.addListener("webappsEvent", aListener);
   }
 }

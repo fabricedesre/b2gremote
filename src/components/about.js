@@ -26,7 +26,7 @@ AboutB2G.prototype = {
     let ios = Cc["@mozilla.org/network/io-service;1"]
                 .getService(Ci.nsIIOService);
 
-    let channel = ios.newChannel("chrome://b2g-remote/content/about.html",
+    let channel = ios.newChannel("chrome://b2g-remote/content/index.xhtml",
                                  null, null);
     //channel.originalURI = aURI;
     return channel;
