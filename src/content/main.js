@@ -8,7 +8,11 @@ let Cu = Components.utils;
 
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
-Cu.import("resource://gre/modules/commonjs/promise/core.js");
+try {
+  Cu.import("resource://gre/modules/commonjs/promise/core.js");
+} catch (e) {
+  Cu.import("resource://gre/modules/commonjs/sdk/core/promise.js");
+}
 Cu.import("chrome://b2g-remote/content/adb.jsm");
 Cu.import("chrome://b2g-remote/content/debugger.jsm");
 Cu.import("resource://gre/modules/osfile.jsm");
