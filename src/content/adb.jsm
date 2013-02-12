@@ -10,7 +10,7 @@ let Cu = Components.utils;
 let CC = Components.Constructor;
 
 Cu.import("resource://gre/modules/Services.jsm");
-Cu.import("resource://gre/modules/commonjs/promise/core.js");
+Cu.import("resource://gre/modules/commonjs/sdk/core/promise.js");
 Cu.import("resource://gre/modules/osfile.jsm");
 
 this.EXPORTED_SYMBOLS = ["ADB"];
