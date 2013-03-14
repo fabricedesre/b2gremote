@@ -55,6 +55,7 @@ function replaceTextNode(aId, aText) {
 
 function guessAppKind() {
   let dir = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+console.log("appPath: " + appPath);
   dir.initWithPath(appPath);
   appKind = null;
   if (!dir.exists()) {
@@ -162,7 +163,7 @@ function chooseAppDir() {
         if (aResult != picker.returnOK) {
           return;
         }
-        appPath = picker.fileURL.QueryInterface(Ci.nsIFileURL).path;
+        appPath = picker.file.path;
         guessAppKind();
         if (appKind) {
           getAppType(function() {
