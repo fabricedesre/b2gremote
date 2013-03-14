@@ -2,14 +2,34 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
- // Wrapper around the ADB utility.
+// Wrapper around the ADB utility.
 
-let Cc = Components.classes;
-let Ci = Components.interfaces;
-let Cu = Components.utils;
-let CC = Components.Constructor;
+'use strict';
+
+// Whether or not this script is being loaded as a CommonJS module
+// (from an addon built using the Add-on SDK).  If it isn't a CommonJS Module,
+// then it's a JavaScript Module.
+const COMMONJS = ("require" in this);
+
+let components;
+if (COMMONJS) {
+  components = require("chrome").components;
+} else {
+  components = Components;
+}
+let Cc = components.classes;
+let Ci = components.interfaces;
+let Cu = components.utils;
 
 Cu.import("resource://gre/modules/Services.jsm");
+
+// Get the TextEncoder and TextDecoder interfaces from the hidden window,
+// since they aren't defined in a CommonJS module by default.
+let hiddenWindow = Cc['@mozilla.org/appshell/appShellService;1']
+                     .getService(Ci.nsIAppShellService).hiddenDOMWindow;
+let TextEncoder = COMMONJS ? hiddenWindow.TextEncoder : TextEncoder;
+let TextDecoder = COMMONJS ? hiddenWindow.TextDecoder : TextDecoder;
+
 try {
   Cu.import("resource://gre/modules/commonjs/promise/core.js");
 } catch (e) {
@@ -17,40 +37,72 @@ try {
 }
 Cu.import("resource://gre/modules/osfile.jsm");
 
-this.EXPORTED_SYMBOLS = ["ADB"];
+if (!COMMONJS) {
+  this.EXPORTED_SYMBOLS = ["ADB"];
+}
 
 function debug(aStr) {
   dump("--*-- ADB.jsm: " + aStr + "\n");
 }
 
+let ready = false;
+
 this.ADB = {
-  ready: false,
+  get ready() ready,
+  set ready(newVal) { ready = newVal },
 
   // We startup by launching adb in server mode, and setting
   // the tcp socket preference to |true|
   init: function adb_init() {
     debug("init");
     let platform = Services.appinfo.OS;
-    let uri = "chrome://b2g-remote/content/binaries/";
-    let bin;
 
+    let uri;
+    if (COMMONJS) {
+      uri = require("self").data.url("");
+    } else {
+      uri = "chrome://b2g-remote/content/binaries/";
+    }
+
+    let bin;
     switch(platform) {
       case "Linux":
-        bin = uri + "linux/adb";
+        if (COMMONJS) {
+          bin = uri + (require("runtime").XPCOMABI.indexOf("x86_64") == 0 ? "linux64" : "linux") + "/adb/adb";
+        } else {
+          bin = uri + "linux/adb";
+        }
         break;
       case "Darwin":
-        bin = uri + "darwin/adb";
+        if (COMMONJS) {
+          bin = uri + "mac64/adb/adb";
+        } else {
+          bin = uri + "darwin/adb";
+        }
+        break;
+      case "WINNT":
+        if (COMMONJS) {
+          bin = uri + "win32/adb/adb.exe";
+        } else {
+          bin = uri + "win32/adb.exe";
+        }
         break;
       default:
         debug("Unsupported platform : " + platform);
         return;
     }
 
-    let chromeReg = Cc["@mozilla.org/chrome/chrome-registry;1"]
-                      .getService(Ci.nsIChromeRegistry);
-    let url = chromeReg.convertChromeURL(Services.io.newURI(bin, null, null))
-                       .QueryInterface(Ci.nsIFileURL);
-    this._adb = url.file;
+    if (COMMONJS) {
+      let url = Services.io.newURI(bin, null, null)
+                        .QueryInterface(Ci.nsIFileURL);
+      this._adb = url.file;
+    } else {
+      let chromeReg = Cc["@mozilla.org/chrome/chrome-registry;1"]
+                        .getService(Ci.nsIChromeRegistry);
+      let url = chromeReg.convertChromeURL(Services.io.newURI(bin, null, null))
+                         .QueryInterface(Ci.nsIFileURL);
+      this._adb = url.file;
+    }
 
     let process = Cc["@mozilla.org/process/util;1"]
                     .createInstance(Ci.nsIProcess);
@@ -77,7 +129,8 @@ this.ADB = {
   // This function is sync, and returns before we know if opening the
   // connection succeeds. Callers must attach handlers to the socket.
   _connect: function adb_connect() {
-    let TCPSocket = new (CC("@mozilla.org/tcp-socket;1", "nsIDOMTCPSocket"))();
+    let TCPSocket = Cc["@mozilla.org/tcp-socket;1"]
+                      .createInstance(Ci.nsIDOMTCPSocket);
     let socket = TCPSocket.open(
      "127.0.0.1", 5037,
      { binaryType: "arraybuffer" });
@@ -138,8 +191,8 @@ this.ADB = {
 
     }.bind(this);
 
-    socket.onerror = function() {
-      debug("trackDevices onerror");
+    socket.onerror = function(event) {
+      debug("trackDevices onerror: " + event.data);
       Services.obs.notifyObservers(null, "adb-track-devices-stop", null);
     }
 
@@ -185,7 +238,7 @@ this.ADB = {
           newDev[dev] = status !== "offline";
         });
         // Check which device changed state.
-        for (dev in newDev) {
+        for (let dev in newDev) {
           if (devices[dev] != newDev[dev]) {
             if (dev in devices || newDev[dev]) {
               let topic = newDev[dev] ? "adb-device-connected"
@@ -243,16 +296,16 @@ this.ADB = {
   // "S_ISREG" "S_ISFIFO" "S_ISLNK" "S_ISSOCK"
   checkFileMode: function adb_checkFileMode(aMode, aWhat) {
     /* Encoding of the file mode.  See bits/stat.h */
-    const S_IFMT = 0170000; /* These bits determine file type.  */
+    const S_IFMT = parseInt("170000", 8); /* These bits determine file type.  */
 
     /* File types.  */
-    const S_IFDIR  = 0040000; /* Directory.  */
-    const S_IFCHR  = 0020000; /* Character device.  */
-    const S_IFBLK  = 0060000; /* Block device.  */
-    const S_IFREG  = 0100000; /* Regular file.  */
-    const S_IFIFO  = 0010000; /* FIFO.  */
-    const S_IFLNK  = 0120000; /* Symbolic link.  */
-    const S_IFSOCK = 0140000; /* Socket.  */
+    const S_IFDIR  = parseInt("040000", 8); /* Directory.  */
+    const S_IFCHR  = parseInt("020000", 8); /* Character device.  */
+    const S_IFBLK  = parseInt("060000", 8); /* Block device.  */
+    const S_IFREG  = parseInt("100000", 8); /* Regular file.  */
+    const S_IFIFO  = parseInt("010000", 8); /* FIFO.  */
+    const S_IFLNK  = parseInt("120000", 8); /* Symbolic link.  */
+    const S_IFSOCK = parseInt("140000", 8); /* Socket.  */
 
     let masks = {
       "S_ISDIR": S_IFDIR,
@@ -534,3 +587,7 @@ this.ADB = {
 }
 
 this.ADB.init();
+
+if (COMMONJS) {
+  module.exports = this.ADB;
+}
