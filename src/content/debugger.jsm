@@ -2,9 +2,22 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-let Cc = Components.classes;
-let Ci = Components.interfaces;
-let Cu = Components.utils;
+'use strict';
+
+// Whether or not this script is being loaded as a CommonJS module
+// (from an addon built using the Add-on SDK).  If it isn't a CommonJS Module,
+// then it's a JavaScript Module.
+const COMMONJS = ("require" in this);
+
+let components;
+if (COMMONJS) {
+  components = require("chrome").components;
+} else {
+  components = Components;
+}
+let Cc = components.classes;
+let Ci = components.interfaces;
+let Cu = components.utils;
 
 Cu.import("resource://gre/modules/Services.jsm");
 try {
@@ -14,12 +27,13 @@ try {
 }
 Cu.import("resource://gre/modules/devtools/dbg-client.jsm");
 
-this.EXPORTED_SYMBOLS = ["Debugger"];
+if (!COMMONJS) {
+  this.EXPORTED_SYMBOLS = ["Debugger"];
+}
+
+let client = null, webappsActor = null;
 
 this.Debugger = {
-  _client: null,
-  _webappsActor: null,
-
   init: function dbg_init(aPort) {
     dump("Debugger init(" + aPort + ")\n");
     let enabled = Services.prefs.getBoolPref("devtools.debugger.remote-enabled");
@@ -28,15 +42,15 @@ this.Debugger = {
     }
 
     let transport = debuggerSocketConnect("localhost", aPort);
-    this._client = new DebuggerClient(transport);
+    client = new DebuggerClient(transport);
 
     let deferred = Promise.defer();
     let self = this;
 
-    this._client.connect(function onConnected(aType, aTraits) {
-      self._client.listTabs(function(aResponse) {
+    client.connect(function onConnected(aType, aTraits) {
+      client.listTabs(function(aResponse) {
         if (aResponse.webappsActor) {
-          self._webappsActor = aResponse.webappsActor;
+          webappsActor = aResponse.webappsActor;
           deferred.resolve();
         } else {
           deferred.reject();
@@ -47,11 +61,11 @@ this.Debugger = {
   },
 
   webappsRequest: function dbg_webappsRequest(aData) {
-    dump("webappsRequest " + this._webappsActor + "\n");
-    aData.to = this._webappsActor;
+    dump("webappsRequest " + webappsActor + "\n");
+    aData.to = webappsActor;
     dump("about to send " + JSON.stringify(aData, null, 2) + "\n");
     let deferred = Promise.defer();
-    this._client.request(aData,
+    client.request(aData,
       function onResponse(aResponse) {
       dump("response=" + JSON.stringify(aResponse, null, 2) + "\n");
       if (aResponse.error) {
@@ -64,6 +78,10 @@ this.Debugger = {
   },
 
   setWebappsListener: function dbg_setWebappsListener(aListener) {
-    this._client.addListener("webappsEvent", aListener);
+    client.addListener("webappsEvent", aListener);
   }
+}
+
+if (COMMONJS) {
+  module.exports = this.Debugger;
 }
