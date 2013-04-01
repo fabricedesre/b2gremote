@@ -162,7 +162,7 @@ function chooseAppDir() {
         if (aResult != picker.returnOK) {
           return;
         }
-        appPath = picker.fileURL.QueryInterface(Ci.nsIFileURL).path;
+        appPath = picker.file.path;
         guessAppKind();
         if (appKind) {
           getAppType(function() {
