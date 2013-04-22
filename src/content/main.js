@@ -14,6 +14,7 @@ try {
   Cu.import("resource://gre/modules/commonjs/sdk/core/promise.js");
 }
 Cu.import("chrome://b2g-remote/content/adb.jsm");
+ADB.start();
 Cu.import("chrome://b2g-remote/content/debugger.jsm");
 Cu.import("resource://gre/modules/osfile.jsm");
 Cu.import("resource://gre/modules/NetUtil.jsm");
