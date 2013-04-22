@@ -49,7 +49,11 @@ if (!COMMONJS) {
 }
 
 function debug(aStr) {
-  dump("--*-- ADB.jsm: " + aStr + "\n");
+  if (COMMONJS) {
+    console.log("adb: " + aStr);
+  } else {
+    dump("--*-- ADB.jsm: " + aStr + "\n");
+  }
 }
 
 let ready = false;
@@ -121,15 +125,15 @@ this.ADB = {
       arguments: ["start-server"],
 
       stdout: function adb_start_stdout(data) {
-        debug("stdout: " + data);
+        debug(data.trim());
       },
 
       stderr: function adb_start_stderr(data) {
-        debug("stderr: " + data);
+        debug(data.trim());
       },
 
       done: function adb_start_done(result) {
-        debug("start-server exit code: " + result.exitCode);
+        debug("start-server done: " + result.exitCode);
         if (result.exitCode == 0) {
           Services.prefs.setBoolPref("dom.mozTCPSocket.enabled", true);
           self.ready = true;
@@ -160,15 +164,15 @@ this.ADB = {
       arguments: ["kill-server"],
 
       stdout: function adb_start_stdout(data) {
-        debug("kill-server stdout: " + data);
+        debug(data.trim());
       },
 
       stderr: function adb_start_stderr(data) {
-        debug("kill-server stderr: " + data);
+        debug(data.trim());
       },
 
       done: function adb_start_done(result) {
-        debug("kill-server exit code: " + result.exitCode);
+        debug("kill-server done: " + result.exitCode);
         if (result.exitCode == 0) {
           self.ready = false;
           Services.obs.notifyObservers(null, "adb-killed", null);
@@ -273,7 +277,7 @@ this.ADB = {
       let data = aEvent.data;
       debug("length=" + data.length);
       let dec = new TextDecoder();
-      debug(dec.decode(data));
+      debug(dec.decode(data).trim());
 
       // check the OKAY or FAIL on first packet.
       if (waitForFirst) {
