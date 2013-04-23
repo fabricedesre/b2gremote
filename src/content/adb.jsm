@@ -23,6 +23,13 @@ let Cu = components.utils;
 
 Cu.import("resource://gre/modules/Services.jsm");
 
+let subprocess;
+if (COMMONJS) {
+  subprocess = require("subprocess");
+} else {
+  Cu.import("chrome://b2g-remote/content/subprocess.jsm");
+}
+
 // Get the TextEncoder and TextDecoder interfaces from the hidden window,
 // since they aren't defined in a CommonJS module by default.
 let hiddenWindow = Cc['@mozilla.org/appshell/appShellService;1']
@@ -42,7 +49,11 @@ if (!COMMONJS) {
 }
 
 function debug(aStr) {
-  dump("--*-- ADB.jsm: " + aStr + "\n");
+  if (COMMONJS) {
+    console.log("adb: " + aStr);
+  } else {
+    dump("--*-- ADB.jsm: " + aStr + "\n");
+  }
 }
 
 let ready = false;
@@ -51,8 +62,6 @@ this.ADB = {
   get ready() ready,
   set ready(newVal) { ready = newVal },
 
-  // We startup by launching adb in server mode, and setting
-  // the tcp socket preference to |true|
   init: function adb_init() {
     debug("init");
     let platform = Services.appinfo.OS;
@@ -103,26 +112,88 @@ this.ADB = {
                          .QueryInterface(Ci.nsIFileURL);
       this._adb = url.file;
     }
+  },
 
-    let process = Cc["@mozilla.org/process/util;1"]
-                    .createInstance(Ci.nsIProcess);
-    process.init(this._adb);
-    let params = ["start-server"];
+  // We startup by launching adb in server mode, and setting
+  // the tcp socket preference to |true|
+  start: function adb_start() {
     let self = this;
-    process.runAsync(params, params.length, {
-      observe: function(aSubject, aTopic, aData) {
-        switch(aTopic) {
-          case "process-finished":
-            Services.prefs.setBoolPref("dom.mozTCPSocket.enabled", true);
-            Services.obs.notifyObservers(null, "adb-ready", null);
-            self.ready = true;
-            break;
-          case "process-failed":
-            self.ready = false;
-            break;
+
+    subprocess.call({
+      command: this._adb.path,
+
+      arguments: ["start-server"],
+
+      stdout: function adb_start_stdout(data) {
+        debug(data.trim());
+      },
+
+      stderr: function adb_start_stderr(data) {
+        debug(data.trim());
+      },
+
+      done: function adb_start_done(result) {
+        debug("start-server done: " + result.exitCode);
+        if (result.exitCode == 0) {
+          Services.prefs.setBoolPref("dom.mozTCPSocket.enabled", true);
+          self.ready = true;
+          Services.obs.notifyObservers(null, "adb-ready", null);
+        } else {
+          self.ready = false;
         }
       }
-    }, false);
+    });
+  },
+
+  /**
+   * Kill the ADB server.  We do this by running ADB again, passing it
+   * the "kill-server" argument.
+   *
+   * @param {Boolean} aSync
+   *        Whether or not to kill the server synchronously.  In general,
+   *        this should be false.  But on Windows, an addon may fail to update
+   *        if its copy of ADB is running when Firefox tries to update it.
+   *        So addons who observe their own updates and kill the ADB server
+   *        beforehand should do so synchronously on Windows to make sure
+   *        the update doesn't race the killing.
+   */
+  kill: function adb_kill(aSync) {
+    let process = subprocess.call({
+      command: this._adb.path,
+
+      arguments: ["kill-server"],
+
+      stdout: function adb_start_stdout(data) {
+        debug(data.trim());
+      },
+
+      stderr: function adb_start_stderr(data) {
+        debug(data.trim());
+      },
+
+      done: function adb_start_done(result) {
+        debug("kill-server done: " + result.exitCode);
+        if (result.exitCode == 0) {
+          self.ready = false;
+          Services.obs.notifyObservers(null, "adb-killed", null);
+        } else if (result.exitCode == 1) {
+          // This is a known problem.  For some reason, adb kill-server
+          // frequently writes "* server not running *" and exits with code 1
+          // even though the server process was running, and it killed it.
+          self.ready = false;
+          Services.obs.notifyObservers(null, "adb-killed", null);
+        } else {
+          // It's hard to say whether or not ADB is ready at this point,
+          // but it seems safer to assume that it isn't, so code that wants
+          // to use it later will try to restart it.
+          self.ready = false;
+          Services.obs.notifyObservers(null, "adb-killed", null);
+        }
+      }
+    });
+    if (aSync) {
+      process.wait();
+    }
   },
 
   // Creates a socket connected to the adb instance.
@@ -206,7 +277,7 @@ this.ADB = {
       let data = aEvent.data;
       debug("length=" + data.length);
       let dec = new TextDecoder();
-      debug(dec.decode(data));
+      debug(dec.decode(data).trim());
 
       // check the OKAY or FAIL on first packet.
       if (waitForFirst) {
